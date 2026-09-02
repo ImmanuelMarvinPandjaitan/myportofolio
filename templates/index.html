@@ -1,0 +1,78 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Immanuel Marvin Pandjaitan - Portfolio</title>
+    <!-- font display buat judul, sama kayak yang dipakai di style.css (h1, .brand) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+    <!-- header pakai class site-header biar kena flexbox dari style.css -->
+    <header class="site-header">
+        <div class="container">
+            <a href="#profile" class="brand">Marvin</a>
+            <nav>
+                <a href="#profile">Profile</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- section hero, class hero-grid ini yang bikin layout dua kolom (identity+details / photo) -->
+        <section class="hero" id="profile">
+            <div class="container hero-grid">
+
+                <div class="hero-identity">
+                    <p class="hero-kicker">Computer Science &middot; Angkatan 2025</p>
+                    <h1>Immanuel Marvin Pandjaitan</h1>
+                </div>
+
+                <div class="hero-photo">
+                    <div class="photo-block"></div>
+                    <img class="avatar" src="{% static 'img/foto.jpg' %}" alt="Foto Immanuel Marvin Pandjaitan">
+                </div>
+
+                <div class="hero-details">
+                    <p class="bio">
+                        Halo! Saya Immanuel Marvin Pandjaitan, mahasiswa Computer Science angkatan 2025.
+                        Selain berfokus di dunia teknologi dan ilmu komputer, saya juga seorang Liverpool die hard fans!
+                    </p>
+
+                    <dl class="meta-list">
+                        <div class="meta-row">
+                            <dt>NPM</dt>
+                            <dd>2506623881</dd>
+                        </div>
+                        <div class="meta-row">
+                            <dt>Program</dt>
+                            <dd>Computer Science</dd>
+                        </div>
+                    </dl>
+
+                    <div class="social-links">
+                        <a href="https://www.linkedin.com/in/immanuel-marvin-pandjaitan-a9b8422ba?utm_source=share_via&utm_content=profile&utm_medium=member_ios" class="social-link" target="_blank">LinkedIn</a>
+                        <a href="https://github.com/ImmanuelMarvinPandjaitan" class="social-link" target="_blank">GitHub</a>
+                        <a href="https://www.instagram.com/marvinpandjaitan?igsi=eWpmN25xbDJucjho&utm_source=qr" class="social-link" target="_blank">Instagram</a>
+                        <a href="mailto:marvinpanjaitan@gmail.com" class="social-link">Email</a>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+    </main>
+
+    <!-- footer pakai class site-footer biar kena border-top & warna dari style.css -->
+    <footer class="site-footer">
+        <div class="container">
+            <p>&copy; 2026 Immanuel Marvin Pandjaitan. All rights reserved.</p>
+        </div>
+    </footer>
+
+</body>
+</html>

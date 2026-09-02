@@ -1,5 +1,5 @@
-Nama:Immanuel Marvin Pandjaitan
+Nama : Immanuel Marvin Pandjaitan
 
-NPM:2506623881
+NPM : 2506623881
 
-Kelas:PBP D
+Kelas : PBP D

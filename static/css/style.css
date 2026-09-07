@@ -176,7 +176,7 @@ h1, .brand {
     border-top: 1px solid var(--line);
 }
 
-/* ===== section Skills (Tugas 1) ===== */
+/* ===== section Skills (Tugas 01) ===== */
 
 .skills {
     padding: 3rem 0 5rem;
@@ -294,5 +294,14 @@ h1, .brand {
 
     .social-links {
         justify-content: flex-start;
+    }
+
+    .skills-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .education-item {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
     }
 }

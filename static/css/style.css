@@ -176,6 +176,109 @@ h1, .brand {
     border-top: 1px solid var(--line);
 }
 
+/* ===== section Skills (Tugas 1) ===== */
+
+.skills {
+    padding: 3rem 0 5rem;
+    border-top: 1px solid var(--line);
+}
+
+.section-kicker {
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-dark);
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.section-title {
+    font-family: "Space Grotesk", -apple-system, sans-serif;
+    font-size: 2rem;
+    margin-bottom: 2rem;
+}
+
+/* grid 2 kolom sama rata (skill masih dikit), beda sama .hero-grid yang pakai grid-template-areas */
+.skills-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+}
+
+.skill-card {
+    background-color: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.skill-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 18px rgba(28, 25, 23, 0.08);
+    border-color: var(--accent);
+}
+
+.skill-icon {
+    font-size: 1.75rem;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.skill-card h3 {
+    margin-bottom: 0.4rem;
+}
+
+.skill-card p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* ===== section Riwayat Pendidikan (Tugas 1) ===== */
+
+.education {
+    padding: 3rem 0 5rem;
+    border-top: 1px solid var(--line);
+}
+
+/* bukan grid kayak skills, tapi list vertikal 2 kolom (tahun | detail) per baris */
+.education-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.education-item {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 1rem;
+    padding: 1.1rem 0;
+    border-bottom: 1px solid var(--line);
+    transition: background-color 0.2s ease;
+}
+
+.education-item:last-child {
+    border-bottom: none;
+}
+
+.education-item:hover {
+    background-color: #fff;
+}
+
+.education-year {
+    color: var(--accent-dark);
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.education-info h3 {
+    margin-bottom: 0.2rem;
+}
+
+.education-info p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
 @media (max-width: 600px) {
     .hero-grid {
         grid-template-columns: 1fr;

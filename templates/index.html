@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Immanuel Marvin Pandjaitan - Portfolio</title>
+    <title>{{ name }} - Portofolio</title>
     <!-- font display buat judul, sama kayak yang dipakai di style.css (h1, .brand) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,11 +16,12 @@
     <!-- header pakai class site-header biar kena flexbox dari style.css -->
     <header class="site-header">
         <div class="container">
-            <a href="#profile" class="brand">Marvin</a>
+             <a href="{% url 'main:show_main' %}" class="brand">{{ name }}</a>
             <nav>
-                <a href="#profile">Profile</a>
+                <a href="{% url 'main:show_main' %}">Profile</a>
                 <a href="#skills">Skills</a>
                 <a href="#pendidikan">Pendidikan</a>
+                <a href="{% url 'main:show_experience' %}">Experience</a>
             </nav>
         </div>
     </header>
@@ -32,28 +33,25 @@
 
                 <div class="hero-identity">
                     <p class="hero-kicker">Computer Science &middot; Angkatan 2025</p>
-                    <h1>Immanuel Marvin Pandjaitan</h1>
+                    <h1>{{ name }}</h1>
                 </div>
 
                 <div class="hero-photo">
                     <div class="photo-block"></div>
-                    <img class="avatar" src="{% static 'img/foto.jpg' %}" alt="Foto Immanuel Marvin Pandjaitan">
+                    <img class="avatar" src="{% static 'img/foto.jpg' %}" alt="Foto {{ name }}">
                 </div>
 
                 <div class="hero-details">
-                    <p class="bio">
-                        Halo! Saya Immanuel Marvin Pandjaitan, mahasiswa Computer Science angkatan 2025.
-                        Selain berfokus di dunia teknologi dan ilmu komputer, saya juga seorang Liverpool die hard fans!
-                    </p>
+                    <p class="bio">{{ bio }}</p>
 
                     <dl class="meta-list">
                         <div class="meta-row">
                             <dt>NPM</dt>
-                            <dd>2506623881</dd>
+                            <dd>{{ npm }}</dd>
                         </div>
                         <div class="meta-row">
                             <dt>Program</dt>
-                            <dd>Computer Science</dd>
+                            <dd>{{ study_program }}</dd>
                         </div>
                     </dl>
 
@@ -67,7 +65,8 @@
 
             </div>
         </section>
-                <!-- section Skills (Tugas 01) -->
+
+        <!-- section Skills (Tugas 01) -->
         <!-- pakai <article> tiap card karena isinya berdiri sendiri (nama skill + deskripsi),
              bukan cuma bagian dari alur section kayak <div> biasa -->
         <section class="skills" id="skills">
@@ -75,7 +74,7 @@
                 <p class="section-kicker">Yang saya kuasai</p>
                 <h2 class="section-title">Skills</h2>
 
-                                <div class="skills-grid">
+                <div class="skills-grid">
                     <article class="skill-card">
                         <span class="skill-icon">🐍</span>
                         <h3>Python</h3>
@@ -87,7 +86,7 @@
                         <h3>Java</h3>
                         <p>Telah saya pelajari di mata kuliah DDP2, dari OOP dan sekarang di struktur data dan algoritma.</p>
                     </article>
-                 </div>
+                </div>
             </div>
         </section>
 
@@ -139,7 +138,7 @@
     <!-- footer pakai class site-footer biar kena border-top & warna dari style.css -->
     <footer class="site-footer">
         <div class="container">
-            <p>&copy; 2026 Immanuel Marvin Pandjaitan. All rights reserved.</p>
+            <p>&copy; 2026 {{ name }}. Fakultas Ilmu Komputer, Universitas Indonesia.</p>
         </div>
     </footer>
 

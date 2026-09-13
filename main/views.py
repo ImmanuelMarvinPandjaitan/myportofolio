@@ -5,7 +5,7 @@ from main.models import Experience, Education
 
 def show_main(request):
     context = {
-        "name": "Immanuel Marvin Pandjaiatan",
+        "name": "Immanuel Marvin Pandjaitan",
         "npm": "2506623881",
         "study_program": "S1 Ilmu Komputer",
         "bio": (
@@ -18,7 +18,7 @@ def show_main(request):
 
 def show_experience(request):
     context = {
-        "name": "Immanuel Marvin Pandjaiatan",
+        "name": "Immanuel Marvin Pandjaitan",
         "experience_list": Experience.objects.all(),
     }
     return render(request, "experience.html", context)
@@ -27,7 +27,7 @@ def show_experience(request):
 # nampilin daftar riwayat pendidikan, diambil dari model Education (dulunya hardcode di index.html)
 def show_education(request):
     context = {
-        "name": "Immanuel Marvin Pandjaiatan",
+        "name": "Immanuel Marvin Pandjaitan",
         "education_list": Education.objects.all().order_by('started_at'),
     }
     return render(request, "education.html", context)

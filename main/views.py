@@ -1,8 +1,6 @@
 from django.shortcuts import render
 
-from django.shortcuts import render
-
-from main.models import Experience
+from main.models import Experience, Education
 
 
 def show_main(request):
@@ -20,8 +18,16 @@ def show_main(request):
 
 def show_experience(request):
     context = {
-        "name": "Burhan",
+        "name": "Immanuel Marvin Pandjaiatan",
         "experience_list": Experience.objects.all(),
     }
     return render(request, "experience.html", context)
-# Create your views here.
+
+
+# nampilin daftar riwayat pendidikan, diambil dari model Education (dulunya hardcode di index.html)
+def show_education(request):
+    context = {
+        "name": "Immanuel Marvin Pandjaiatan",
+        "education_list": Education.objects.all().order_by('started_at'),
+    }
+    return render(request, "education.html", context)

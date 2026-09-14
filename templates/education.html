@@ -1,0 +1,72 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pendidikan - {{ name }}</title>
+    <!-- font display buat judul, sama kayak yang dipakai di style.css (h1, .brand) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+    <!-- header pakai class site-header biar kena flexbox dari style.css -->
+    <header class="site-header">
+        <div class="container">
+            <a href="{% url 'main:show_main' %}" class="brand">{{ name }}</a>
+            <nav>
+                <a href="{% url 'main:show_main' %}">Profile</a>
+                <a href="{% url 'main:show_main' %}#skills">Skills</a>
+                <a href="{% url 'main:show_education' %}">Pendidikan</a>
+                <a href="{% url 'main:show_experience' %}">Experience</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- dulunya section statis di index.html, sekarang dipindah kesini dan datanya dari model Education -->
+        <section class="education" id="pendidikan">
+            <div class="container">
+                <p class="section-kicker">Riwayat Pendidikan</p>
+                <h1 class="section-title">Pendidikan</h1>
+
+                <div class="education-list">
+                    {% for education in education_list %}
+                        <article class="education-item">
+                            <span class="education-year">
+                                {{ education.started_at|date:"Y" }}
+                                &ndash;
+                                {% if education.is_ongoing %}sekarang{% else %}{{ education.ended_at|date:"Y" }}{% endif %}
+                            </span>
+                            <div class="education-info">
+                                <h3>
+                                    {{ education.institution }}
+                                    <small>({{ education.get_level_display }})</small>
+                                </h3>
+                                {% if education.major %}
+                                    <p>{{ education.major }}</p>
+                                {% endif %}
+                            </div>
+                        </article>
+                    {% empty %}
+                        <p class="empty-state">
+                            Belum ada riwayat pendidikan yang ditambahkan.
+                        </p>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- footer pakai class site-footer biar kena border-top & warna dari style.css -->
+    <footer class="site-footer">
+        <div class="container">
+            <p>&copy; 2026 {{ name }}. Fakultas Ilmu Komputer, Universitas Indonesia.</p>
+        </div>
+    </footer>
+
+</body>
+</html>

@@ -49,3 +49,33 @@ Untuk iterasi selanjutnya, saya ingin memindahkan data Skills dan Pendidikan ini
 ### AI Disclosure
 
 Saya menggunakan Claude untuk brainstorming struktur section Skills dan Riwayat Pendidikan, penulisan CSS Grid (`.skills-grid`, `.education-item`) beserta efek hover, penyesuaian responsive di media query, dan bantuan menyusun draft jawaban pertanyaan reflektif di atas — yang saya baca ulang dan sesuaikan dengan proses dan pengalaman saya sendiri sebelum submit. Untuk warna hover pada .skill-card dan breakpoint media query, saya tidak langsung pakai saran awal dari Claude — warna hover awal saya rasa kurang kontras dengan warna kartu, jadi saya sesuaikan sendiri, dan breakpoint yang awalnya disarankan di 768px saya ubah jadi 600px karena di HP saya sendiri layout-nya masih terlihat kepotong/terlalu sempit di lebar itu. Bagian konten (data skill, riwayat pendidikan, teks bio) saya isi sendiri sesuai data asli saya. Saya pahami tiap baris kode HTML/CSS yang dihasilkan sebelum di-commit.
+
+### Tugas 2
+
+1. **Alur request sampai data tampil di browser**
+
+Semuanya dimulai ketika browser mengirim request ke `/education/`. Request itu pertama kali ditangkap oleh `urls.py` di level proyek (`portofolio/urls.py`), tapi file ini sendiri nggak tahu cara nanganinnya — dia cuma nge-forward semua path ke `main/urls.py` lewat `include('main.urls')`, karena logika routing yang sesungguhnya sengaja dipisah ke level aplikasi (`main`), bukan ditumpuk di proyek. Di `main/urls.py`, barulah path `education/` dicocokkan dengan salah satu `urlpatterns`, dan Django memetakannya ke fungsi `show_education` di `main/views.py`. Di titik inilah "jembatan" MVT bekerja: view memanggil `Education.objects.all()` untuk query semua baris dari tabel `main_education` di database, lalu membungkusnya ke dalam dictionary `context` bersama data lain seperti `name`.
+
+View lalu memanggil `render(request, "education.html", context)`.  Django Template Engine membaca `education.html`, mencari setiap penanda `{{ }}` dan `{% %}`, lalu menggantinya dengan nilai dari `context` — dalam kasus ini, perulangan `{% for education in education_list %}` dijalankan sebanyak jumlah objek yang ada, menghasilkan satu blok `<article class="education-item">` untuk tiap baris data. Hasil akhirnya berupa dokumen HTML utuh yang dikirim balik sebagai HTTP response ke browser, dan barulah pengguna melihat halaman Pendidikan yang sudah terisi.
+
+2. **Kenapa data tidak ditulis langsung di template**
+
+Alasan utamanya adalah pemeliharaan jangka panjang. Kalau data pendidikan saya tulis langsung sebagai teks statis di `education.html` (seperti yang saya lakukan sebelumnya di Tugas 1), setiap kali ada perubahan — katakanlah saya lulus dan mau nambahin baris "S1 selesai 2029" — saya harus buka kode HTML, cari baris yang tepat, edit manual, lalu deploy ulang seluruh aplikasi cuma buat satu perubahan teks.
+
+Dengan model, data dan tampilan jadi dua hal yang terpisah total. Saya bisa menambah, mengedit, atau menghapus entri pendidikan lewat Django admin atau shell — tanpa menyentuh satu baris pun kode HTML atau Python di luar itu. Ini juga berarti template `education.html` bisa dipakai ulang untuk berapa pun jumlah data yang ada, entah 4 atau 40 entri, tanpa perlu saya tulis ulang. Kalau nanti proyek ini berkembang jadi butuh fitur tambah data lewat form di halaman web(bukan cuma admin/shell), struktur ini juga sudah siap — tinggal bikin view baru buat proses form-nya, model dan template yang sudah ada nggak perlu diubah sama sekali.
+
+3. **`makemigrations` vs `migrate`**
+
+Dua perintah ini sering ketuker karena selalu dijalankan berurutan, tapi fungsinya beda. `makemigrations` itu semacam "mencatat rencana perubahan" — Django membandingkan definisi model di `models.py` dengan riwayat migrasi yang sudah ada, lalu menghasilkan file baru di folder `migrations/` yang isinya instruksi perubahan struktur tabel (bahasa Python, bukan SQL langsung). Di tahap ini, database yang sesungguhnya belum tersentuh sama sekali.
+
+`migrate` itu yang benar-benar mengeksekusi instruksi dari file migrasi tadi ke database (`db.sqlite3` di lokal saya). Tanpa `migrate`, file migrasi cuma jadi dokumen rencana yang nggak pernah dijalankan, dan tabelnya nggak akan pernah kebentuk.
+
+Contoh konkret dari proyek ini: waktu saya menambahkan model `Education` di Tugas 2, `makemigrations` mendeteksi model baru itu dan membuatkan file `0002_education.py` yang isinya instruksi "buat tabel baru dengan kolom institution, level, major, started_at ended_at". Setelah itu saya jalankan `migrate`, dan barulah tabel `main_education` benar-benar muncul di `db.sqlite3`, siap diisi data.
+
+### AI Disclosure (Tugas 2)
+
+Untuk tugas ini saya berdiskusi dengan Claude cukup lama, terutama di tahap perencanaan: memutuskan apakah bikin section portofolio baru dari nol atau memindahkan section Pendidikan yang sudah ada di Tugas 1 jadi model + halaman sendiri — saya pilih opsi kedua. Dari situ, saya dibantu menyusun struktur field model `Education` (termasuk kenapa `major` dibuat `blank=True`, karena SD/SMP nggak punya jurusan), logika view `show_education`, kode template dengan `{% for %}` dan `{% empty %}`, serta empat unit test di `EducationTest`.
+
+Saya juga sempat ketemu beberapa error di luar dugaan yang nggak langsung berhubungan sama kode Tugas 2 ini sendiri, seperti salah menjalankan file (`asgi.py` dan `tests.py` dijalankan langsung sebagai script Python alih-alih lewat `manage.py`) dan masalah cache browser yang bikin CSS/HTML terlihat belum ter-update — semuanya saya diskusikan dan pahami penyebabnya satu per satu sebelum lanjut.
+
+Lalu ada Bagian yang saya periksa ulang pemilihan bagian mana dari portofolio yang dijadikan model (Pendidikan), data pendidikan yang diinput, serta pengecekan akhir bahwa `python manage.py test` dan `python manage.py runserver` berjalan tanpa error sebelum commit dan push. 

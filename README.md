@@ -79,3 +79,36 @@ Untuk tugas ini saya berdiskusi dengan Claude cukup lama, terutama di tahap pere
 Saya juga sempat ketemu beberapa error di luar dugaan yang nggak langsung berhubungan sama kode Tugas 2 ini sendiri, seperti salah menjalankan file (`asgi.py` dan `tests.py` dijalankan langsung sebagai script Python alih-alih lewat `manage.py`) dan masalah cache browser yang bikin CSS/HTML terlihat belum ter-update — semuanya saya diskusikan dan pahami penyebabnya satu per satu sebelum lanjut.
 
 Lalu ada Bagian yang saya periksa ulang pemilihan bagian mana dari portofolio yang dijadikan model (Pendidikan), data pendidikan yang diinput, serta pengecekan akhir bahwa `python manage.py test` dan `python manage.py runserver` berjalan tanpa error sebelum commit dan push. 
+
+### Tugas 3
+
+1. **Kenapa ModelForm, bukan form HTML manual — dan kenapa wajib `{% csrf_token %}`**
+
+Kalau saya bikin form HTML manual (`<input>` satu-satu ditulis tangan), saya harus mendefinisikan ulang tipe input, validasi, dan aturan panjang karakter yang sebenarnya **sudah didefinisikan** di `models.py` nama field, `max_length`, apakah boleh kosong (`blank=True`), semuanya jadi dobel ditulis di dua tempat berbeda. Kalau suatu saat saya ubah field di model (misalnya `major` jadi wajib diisi), saya juga harus inget buat ubah manual di HTML-nya. `ModelForm` menghilangkan duplikasi itu: form-nya otomatis "membaca" struktur dari `Education` lewat `class Meta`, jadi validasi dan tipe input cukup didefinisikan sekali di model, lalu form dan database otomatis konsisten. 
+   
+Soal `{% csrf_token %}`, itu bukan sekadar formalitas Django, tanpa token itu, aplikasi saya rentan kena **Cross-Site Request Forgery**: situs lain yang nggak berhubungan bisa diam-diam nyuruh browser pengunjung saya buat ngirim request POST ke `/education/add/` atau endpoint lain di portofolio saya, tanpa pengunjung itu sadar. Django nge-generate token unik tiap sesi, nempelinnya di form lewat `{% csrf_token %}`, dan nge-cek waktu form di-submit apakah tokennya cocok dengan yang di server. Kalau nggak cocok (atau nggak ada sama sekali), requestnya ditolak duluan sebelum sempat masuk ke logika view saya.
+
+2. **Kenapa JSON lebih disukai dibanding XML buat aplikasi web modern**
+
+Alasan paling kerasa buat saya pribadi waktu ngerjain `get_education_json` adalah soal **ukuran dan kesederhanaan**. Satu objek Education di XML butuh tag pembuka-penutup buat tiap field (`<institution>...</institution>`, dst), sedangkan di JSON cukup pasangan `"institution": "..."` — lebih ringkas, dan itu ngaruh langsung ke ukuran response yang dikirim lewat jaringan.
+
+Alasan kedua, JSON hampir selalu bisa langsung di-*parse* jadi
+struktur data native tanpa proses tambahan yang ribet — di
+JavaScript malah `JSON.parse()` doang, karena sintaksnya memang asalnya dari notasi objek JavaScript. XML butuh parser tersendiri (DOM parser atau semacamnya) yang secara komputasi lebih berat. Buat arsitektur RESTful API yang saya pelajari di tutorial ini di mana endpoint kayak `/api/education/` bakal sering dipanggil berulang-ulang, misalnya nanti kalau saya pasang fitur pencarian real-time pakai fetch() — ukuran yang kecil dan parsing yang cepat itu jadi keunggulan yang langsung kerasa dibanding XML.
+
+3. **Alur view mengembalikan data JSON, dan kenapa perlu serialization**
+
+Waktu browser (atau Postman, seperti di tutorial) mengakses `/api/education/`, Django memetakan URL itu ke fungsi `get_education_json` di `main/views.py`. Di dalam fungsi ini, `Education.objects.all()` mengambil data dari database dalam bentuk QuerySet — tapi QuerySet ini isinya objek Python (instance model Django), bukan teks yang bisa langsung dikirim lewat HTTP. Disinilah `serializers.serialize("json", education_qs)` berperan: dia mengubah tiap objek model jadi representasi teks berformat JSON yang strukturnya baku (ada `model`, `pk`, dan `fields`).
+
+Proses serialization ini **wajib** dilakukan karena protokol HTTP cuma bisa mengangkut data dalam bentuk teks/byte, sedangkan objek Python (apalagi yang menyimpan referensi ke koneksi database, method, dsb) nggak bisa langsung "dikirim" begitu saja —ObjectQuerySet nggak punya arti apa-apa buat client di luar proses Python yang sedang jalan. Setelah diserialize jadi teks JSON, hasilnya dibungkus `HttpResponse(..., content_type="application/json")` supaya client tahu cara membaca isi response-nya, baru dikirim balik lewat jaringan.
+
+Alur ini saya pakai dua kali di proyek saya: pertama buat endpoint API murni (`/api/education/`), kedua di dalam `show_education` sendiri — yang sengaja memanggil `get_education_json`, lalu melakukan **deserialization** (`serializers.deserialize`) buat mengubah teks JSON itu balik jadi objek Python yang bisa dibaca propertinya (`.institution`, `.is_ongoing`, dst) sebelum dikirim ke template `education.html`. Sekilas muter-muter, tapi ini mensimulasikan skenario di mana data sebenarnya datang dari sumber luar berbentuk JSON (API pihak ketiga, atau frontend yang terpisah dari backend), bukan langsung dari database.
+
+### AI Disclosure (Tugas 3)
+
+Tugas ini saya kerjakan dengan bantuan Claude di beberapa bagian.
+Untuk refactoring `base.html`, saya awalnya salah gabungin dua potongan kode dari tutorial (ada duplikat `<head>` dan `<body>`/`<html>` yang nggak ketutup), dan itu ketahuan serta diperbaiki lewat diskusi dengan Claude. Saya juga dibantu mengadaptasi seluruh contoh kode tutorial yang aslinya pakai entity "Project" supaya sesuai dengan pilihan saya sendiri di Tugas 2, yaitu "Education" — termasuk `EducationForm`, view `create_education`/`update_education`/`delete_education`/`get_ed cation_json`, template `education_form.html` yang dipakai bareng buat tambah dan edit data, serta komponen modal konfirmasi hapus.
+
+Fitur update/edit (yang jadi syarat baru di Tugas 3 ini, belum ada di Tutorial 03) saya rancang dengan pola yang sama seperti create, cumaform-nya di-passing `instance=education` supaya terprefill data lama ini saya pahami betul alurnya karena mempraktikkan langsung, bukan cuma nyalin. Saya juga menambahkan endpoint `/api/experience/` sebagai fitur ekstra (bonus, sesuai catatan di soal), dengan pola yang identik ke `/api/education/`.
+
+Keputusan desain (memilih Pendidikan sebagai section, struktur field model, kapan pakai tombol vs link, dsb) tetap saya yang tentukan. Claude membantu di sisi implementasi teknis dan penjelasan konsep, yang saya baca ulang dan pastikan saya pahami sebelum commit.

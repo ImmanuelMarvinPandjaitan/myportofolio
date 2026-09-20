@@ -27,6 +27,17 @@ def show_experience(request):
     }
     return render(request, "experience.html", context)
 
+# bonus: ambil data Experience dalam format JSON juga, pola sama kayak get_education_json
+def get_experience_json(request):
+    title_query = request.GET.get("title", "").strip()
+    experience_qs = Experience.objects.all()
+
+    if title_query:
+        experience_qs = experience_qs.filter(title__icontains=title_query)
+
+    experience_json = serializers.serialize("json", experience_qs)
+    return HttpResponse(experience_json, content_type="application/json")
+
 
 # ambil data Education dalam format JSON, dipakai juga sama show_education di bawah
 def get_education_json(request):

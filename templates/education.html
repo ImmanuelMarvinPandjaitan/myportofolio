@@ -45,7 +45,10 @@
                                 {% if education.major %}
                                     <p>{{ education.major }}</p>
                                 {% endif %}
-                                {% include "components/education_delete_modal.html" with education=education %}
+                                <p class="education-actions">
+                                    <a href="{% url 'main:update_education' education.id %}" class="button button-secondary">Edit</a>
+                                    {% include "components/education_delete_modal.html" with education=education %}
+                                </p>
                             </div>
                         </article>
                     {% empty %}

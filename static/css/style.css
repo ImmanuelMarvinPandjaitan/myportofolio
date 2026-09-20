@@ -426,6 +426,8 @@ h1, .brand {
 }
 
 .education-actions {
+    display: flex;
+    gap: 0.6rem;
     margin-top: 0.6rem;
 }
 

@@ -1,5 +1,5 @@
 from django.db import models
-
+from django.conf import settings
 # Create your models here.
 
 import uuid
@@ -44,6 +44,11 @@ class Education(models.Model):
     major = models.CharField(max_length=255, blank=True)
     started_at = models.DateField()
     ended_at = models.DateField(blank=True, null=True)
+    stars = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="starred_educations",
+        blank=True,
+    )
 
     def __str__(self):
         return self.institution

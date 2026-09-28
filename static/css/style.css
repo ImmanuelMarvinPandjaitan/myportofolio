@@ -545,3 +545,26 @@ h1, .brand {
         text-align: center;
     }
 }
+
+/* ===== autentikasi: status user di navbar + pesan form (Tutorial 04) ===== */
+
+.site-header nav .nav-user {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--accent-dark);
+}
+
+.form-message {
+    padding: 0.7rem 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background-color: #fff;
+    font-size: 0.9rem;
+}
+
+.form-help {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-top: 0.35rem;
+}

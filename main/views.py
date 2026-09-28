@@ -1,13 +1,16 @@
 import datetime
 from django.contrib import messages
 from django.contrib.auth import login, logout
+from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core import serializers
+from django.db.models import Count
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 from main.models import Education, Experience
 from main.forms import EducationForm
-from django.utils.http import url_has_allowed_host_and_scheme
 
 def show_main(request):
     last_login = request.COOKIES.get(
@@ -53,7 +56,12 @@ def get_education_json(request):
     if institution_query:
         education_qs = education_qs.filter(institution__icontains=institution_query)
 
-    education_json = serializers.serialize("json", education_qs)
+    # whitelist field: field "stars" (daftar id user) sengaja TIDAK ikut diekspos
+    education_json = serializers.serialize(
+        "json",
+        education_qs,
+        fields=("institution", "level", "major", "started_at", "ended_at"),
+    )
     return HttpResponse(education_json, content_type="application/json")
 
 
@@ -67,6 +75,17 @@ def show_education(request):
     )
     education_list = [item.object for item in education_objects]
 
+    # info star: 1 query buat total per Education, 1 query buat star milik user yang login
+    star_counts = dict(
+        Education.objects.annotate(total=Count("stars")).values_list("pk", "total")
+    )
+    starred_ids = set()
+    if request.user.is_authenticated:
+        starred_ids = set(request.user.starred_educations.values_list("pk", flat=True))
+    for education in education_list:
+        education.star_count = star_counts.get(education.pk, 0)
+        education.is_starred = education.pk in starred_ids
+
     institution_query = request.GET.get("institution", "").strip()
 
     context = {
@@ -78,6 +97,8 @@ def show_education(request):
 
 
 # form buat nambahin riwayat pendidikan baru lewat halaman web
+@login_required  # belum login -> redirect ke LOGIN_URL
+@permission_required("main.add_education", raise_exception=True)  # login tapi tidak berhak -> 403
 def create_education(request):
     form = EducationForm(request.POST or None)
 
@@ -94,6 +115,8 @@ def create_education(request):
 
 # form buat ngedit riwayat pendidikan yang udah ada, pakai form yang sama kayak create
 # bedanya form-nya di-passing instance= biar ke-prefill data lama
+@login_required
+@permission_required("main.change_education", raise_exception=True)
 def update_education(request, education_id):
     education = get_object_or_404(Education, pk=education_id)
     form = EducationForm(request.POST or None, instance=education)
@@ -110,6 +133,8 @@ def update_education(request, education_id):
     }
     return render(request, "education_form.html", context)
 
+@login_required
+@permission_required("main.delete_education", raise_exception=True)
 def delete_education(request, education_id):
     education = get_object_or_404(Education, pk=education_id)
 
@@ -119,6 +144,21 @@ def delete_education(request, education_id):
         return redirect("main:show_education")
 
     return redirect("main:show_education")
+
+# ---------- Star (Tugas 4) ----------
+
+@login_required
+@require_POST  # toggle mengubah data, jadi hanya boleh lewat POST (+ csrf_token di form)
+def toggle_star(request, education_id):
+    education = get_object_or_404(Education, pk=education_id)
+
+    if education.stars.filter(pk=request.user.pk).exists():
+        education.stars.remove(request.user)
+    else:
+        education.stars.add(request.user)
+
+    return redirect("main:show_education")
+
 
 # ---------- Autentikasi (Tutorial 04, Bagian 1) ----------
 
@@ -163,6 +203,8 @@ def login_user(request):
         "next": request.GET.get("next", ""),
     }
     return render(request, "login.html", context)
+
+
 def logout_user(request):
     logout(request)
     response = redirect("main:show_main")

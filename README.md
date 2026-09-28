@@ -112,3 +112,42 @@ Untuk refactoring `base.html`, saya awalnya salah gabungin dua potongan kode dar
 Fitur update/edit (yang jadi syarat baru di Tugas 3 ini, belum ada di Tutorial 03) saya rancang dengan pola yang sama seperti create, cumaform-nya di-passing `instance=education` supaya terprefill data lama ini saya pahami betul alurnya karena mempraktikkan langsung, bukan cuma nyalin. Saya juga menambahkan endpoint `/api/experience/` sebagai fitur ekstra (bonus, sesuai catatan di soal), dengan pola yang identik ke `/api/education/`.
 
 Keputusan desain (memilih Pendidikan sebagai section, struktur field model, kapan pakai tombol vs link, dsb) tetap saya yang tentukan. Claude membantu di sisi implementasi teknis dan penjelasan konsep, yang saya baca ulang dan pastikan saya pahami sebelum commit.
+
+
+### Tugas 4
+
+Tugas ini melanjutkan bagian **Pendidikan** dari Tugas 2 dan 3 dengan autentikasi, otorisasi berbasis peran, dan fitur star. Halaman daftar `/education/` dan endpoint `/api/education/` tetap bisa dibaca siapa pun, tapi tindakan yang mengubah data sekarang mengikuti hak akses pengguna.
+
+**Hak akses per peran**
+
+| Peran | Baca data | Beri/batal star | Ubah data | Tambah/hapus data |
+|---|---|---|---|---|
+| Pengunjung (belum login) | Ya | Diarahkan ke login | Diarahkan ke login | Diarahkan ke login |
+| Pengguna biasa | Ya | Ya | 403 Forbidden | 403 Forbidden |
+| Editor | Ya | Ya | Ya | 403 Forbidden |
+| Pemilik (superuser) | Ya | Ya | Ya | Ya |
+
+**Apa yang diimplementasikan**
+
+- **Peran Editor** lewat Django Group bernama `Editor` yang hanya diberi permission `main | education | Can change education`. Superuser otomatis punya semua permission, sedangkan pengguna biasa tidak punya permission apa pun.
+- **Pengecekan di sisi server** memakai kombinasi `@login_required` dan `@permission_required(..., raise_exception=True)` pada view `create_education`, `update_education`, dan `delete_education`. Urutan decorator sengaja begitu: `login_required` dicek duluan supaya pengunjung anonim di-redirect ke halaman login, sedangkan pengguna yang sudah login tapi tidak berhak mendapat HTTP 403. Kalau `permission_required` ditaruh di atas, pengunjung anonim malah langsung kena 403.
+- **Tombol disembunyikan di template** memakai objek bawaan `perms` (`perms.main.add_education`, `perms.main.change_education`, `perms.main.delete_education`), jadi tombol Tambah, Edit, dan Hapus hanya muncul untuk yang berhak. Pengecekan di template ini murni soal tampilan, keamanan yang sebenarnya tetap ada di decorator view.
+- **Fitur star**: model `Education` punya field `stars = ManyToManyField(User)` (migrasi `0003_education_stars`). View `toggle_star` hanya menerima POST (`@require_POST`) dengan `{% csrf_token %}` di form, memberi star kalau belum ada dan membatalkannya kalau sudah ada, sehingga satu pengguna maksimal satu star per data. Halaman menampilkan jumlah star dan status milik pengguna yang sedang login (tombol "Beri star" atau "Batalkan star").
+- **Redirect kembali ke halaman asal**: `LOGIN_URL = "main:login"` di `settings.py`, dan `login_user` membaca parameter `next` (divalidasi dengan `url_has_allowed_host_and_scheme` supaya tidak bisa dipakai untuk open redirect), jadi setelah login pengunjung dikembalikan ke halaman yang tadi dia tuju.
+- **Integritas API**: endpoint `/api/education/` tetap terbuka dan berfungsi. Karena field `stars` otomatis ikut ter-serialize dan akan membocorkan daftar id pengguna, `serializers.serialize` sekarang memakai whitelist `fields=("institution", "level", "major", "started_at", "ended_at")`.
+- **Unit test**: `EducationAccessTest` menguji redirect pengunjung anonim, 403 untuk pengguna biasa, editor yang hanya bisa mengubah, superuser yang bebas, toggle star maksimal satu per pengguna, redirect `next`, dan JSON yang tidak membocorkan field `stars`.
+
+**Cara menyiapkan peran (lokal maupun PWS)**
+
+1. Buat pemilik portofolio: `python manage.py createsuperuser`.
+2. Buka `/admin` → **Groups** → **Add group**, beri nama `Editor`, pilih permission `main | education | Can change education` saja, lalu simpan.
+3. Daftarkan akun biasa lewat `/register/`, lalu di `/admin` → **Users** masukkan akun itu ke grup `Editor`.
+4. Database lokal dan PWS terpisah, jadi langkah 1–3 perlu diulang di masing-masing.
+
+### AI Disclosure (Tugas 4)
+
+Untuk tugas ini saya kembali memakai Claude, terutama untuk sisi implementasi teknis. Bagian yang dibantu: rancangan pembagian 4 peran memakai Django Group dan permission (bukan cek nama grup manual), pemasangan `@login_required` + `@permission_required(..., raise_exception=True)` beserta penjelasan kenapa urutannya penting, field `stars` dan view `toggle_star`, penyesuaian `education.html` dengan `perms`, redirect `next` di halaman login, dan draf 12 unit test baru di `EducationAccessTest`. Claude juga yang mengingatkan bahwa field `stars` akan bocor lewat `/api/education/` kalau tidak di-whitelist. Saya sendiri tadinya belum kepikiran kebocoran itu.
+
+Prosesnya nggak mulus dan beberapa kali saya harus balik bertanya. Saat menjalankan `makemigrations -n education_stars`, perintahnya terpotong jadi dua baris waktu di-paste sehingga error `expected one argument`. Waktu menempelkan perubahan `login_user`, saya salah gabung dengan kode lama sehingga muncul error dan saya minta dijelaskan baris mana yang harus dihapus. Saya juga minta penjelasan ulang soal maksud `...` di contoh decorator dan peran `"next"` di `context` login, karena awalnya saya belum paham hubungannya dengan hidden input di `login.html`, lalu saya minta kode lengkap per file supaya nggak salah tempel. Semuanya saya pelajari sampai paham alurnya sebelum lanjut.
+
+Keputusan desain tetap saya yang tentukan: memakai bagian Pendidikan sebagai bagian yang diberi star dan hak akses, dan menjadikan Editor hanya boleh mengubah (bukan menambah atau menghapus) sesuai soal. Sebelum commit saya jalankan `python manage.py test` dan `python manage.py runserver`, lalu mengecek manual dengan empat akun (pengunjung, pengguna biasa, editor, superuser) bahwa tombol dan akses yang muncul sesuai tabel hak akses di atas. Satu keterbatasan yang saya sadari: halaman 403 masih memakai tampilan bawaan Django yang polos dan belum saya buatkan template sendiri, dan `toggle_star` selalu me-reload halaman penuh (belum pakai `fetch()` supaya bisa update tanpa reload).

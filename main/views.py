@@ -7,6 +7,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from main.models import Education, Experience
 from main.forms import EducationForm
+from django.utils.http import url_has_allowed_host_and_scheme
 
 def show_main(request):
     last_login = request.COOKIES.get(
@@ -143,7 +144,14 @@ def login_user(request):
         user = form.get_user()
         login(request, user)
 
-        response = redirect("main:show_main")
+        # kalau tadi dilempar ke login oleh @login_required, balik ke halaman asal (?next=...)
+        next_url = request.POST.get("next") or request.GET.get("next")
+        if not next_url or not url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}
+        ):
+            next_url = "main:show_main"
+
+        response = redirect(next_url)
         response.set_cookie(
             "last_login", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         )
@@ -152,10 +160,9 @@ def login_user(request):
     context = {
         "name": "Immanuel Marvin Pandjaitan",
         "form": form,
+        "next": request.GET.get("next", ""),
     }
     return render(request, "login.html", context)
-
-
 def logout_user(request):
     logout(request)
     response = redirect("main:show_main")

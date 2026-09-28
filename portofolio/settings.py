@@ -159,3 +159,5 @@ MAILERS = {
 
 # gunakan https:// untuk trailing urlnya
 CSRF_TRUSTED_ORIGINS = ["https://immanuel-marvin-myportofolio.pws.cs.ui.ac.id"]
+
+LOGIN_URL = "main:login"

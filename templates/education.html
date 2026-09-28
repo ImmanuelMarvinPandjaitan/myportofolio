@@ -11,10 +11,12 @@
 
                 <div class="education-header">
                     <h1 class="section-title">Pendidikan</h1>
-                    <a href="{% url 'main:create_education' %}" class="button education-add-button">
-                        <span aria-hidden="true">+</span>
-                        Tambah Pendidikan
-                    </a>
+                    {% if perms.main.add_education %}
+                        <a href="{% url 'main:create_education' %}" class="button education-add-button">
+                            <span aria-hidden="true">+</span>
+                            Tambah Pendidikan
+                        </a>
+                    {% endif %}
                 </div>
 
                 <form method="get"
@@ -45,10 +47,27 @@
                                 {% if education.major %}
                                     <p>{{ education.major }}</p>
                                 {% endif %}
-                                <p class="education-actions">
-                                    <a href="{% url 'main:update_education' education.id %}" class="button button-secondary">Edit</a>
-                                    {% include "components/education_delete_modal.html" with education=education %}
-                                </p>
+                                <div class="education-actions">
+                                    {% if user.is_authenticated %}
+                                        <form method="post" action="{% url 'main:toggle_star' education.id %}" class="star-form">
+                                            {% csrf_token %}
+                                            <button type="submit" class="button button-secondary star-button{% if education.is_starred %} is-starred{% endif %}">
+                                                {% if education.is_starred %}&#9733; Batalkan star{% else %}&#9734; Beri star{% endif %}
+                                                ({{ education.star_count }})
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <a href="{% url 'main:login' %}?next={{ request.path|urlencode }}" class="button button-secondary star-button">
+                                            &#9734; Login untuk beri star ({{ education.star_count }})
+                                        </a>
+                                    {% endif %}
+                                    {% if perms.main.change_education %}
+                                        <a href="{% url 'main:update_education' education.id %}" class="button button-secondary">Edit</a>
+                                    {% endif %}
+                                    {% if perms.main.delete_education %}
+                                        {% include "components/education_delete_modal.html" with education=education %}
+                                    {% endif %}
+                                </div>
                             </div>
                         </article>
                     {% empty %}

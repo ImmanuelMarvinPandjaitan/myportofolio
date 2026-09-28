@@ -436,6 +436,16 @@ h1, .brand {
     padding: 0.45rem 0.8rem;
 }
 
+/* tombol star: form-nya cuma pembungkus POST, tombol yang sudah di-star diberi warna beda */
+.star-form {
+    margin: 0;
+}
+
+.star-button.is-starred {
+    border-color: #b8860b;
+    color: #b8860b;
+}
+
 /* modal konfirmasi hapus, dibuka pakai atribut popover bawaan browser */
 .education-delete-modal {
     display: none;

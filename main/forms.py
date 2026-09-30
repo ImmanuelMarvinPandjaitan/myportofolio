@@ -1,4 +1,6 @@
+from django.core.exceptions import ValidationError
 from django.forms import ModelForm, TextInput, Select, DateInput
+from django.utils.html import strip_tags
 
 from main.models import Education
 
@@ -37,3 +39,15 @@ class EducationForm(ModelForm):
             "started_at": DateInput(attrs={"type": "date"}),
             "ended_at": DateInput(attrs={"type": "date"}),
         }
+
+    # lapisan pertahanan kedua (Tutorial 05): buang tag HTML sejak data masuk.
+    # Ini BUKAN pengganti escaping di JavaScript saat menampilkan data,
+    # cuma tambahan supaya data yang tersimpan juga lebih bersih.
+    def clean_institution(self):
+        institution = strip_tags(self.cleaned_data["institution"]).strip()
+        if not institution:
+            raise ValidationError("Nama institusi tidak boleh hanya berisi tag HTML.")
+        return institution
+
+    def clean_major(self):
+        return strip_tags(self.cleaned_data["major"]).strip()

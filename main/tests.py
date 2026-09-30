@@ -76,17 +76,28 @@ class EducationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "education.html")
 
-    def test_education_page_shows_data(self):
-        response = self.client.get(reverse("main:show_education"))
+    def test_education_json_shows_data(self):
+        # sejak Tutorial 05, data pendidikan tidak lagi ada di HTML awal
+        # (dimuat lewat AJAX), jadi kita periksa lewat endpoint JSON-nya
+        response = self.client.get(reverse("main:get_education_json"))
+        data = response.json()
 
-        self.assertContains(response, self.education.institution)
-        self.assertContains(response, self.education.major)
-        self.assertContains(response, "Kuliah")
+        self.assertEqual(len(data), 1)
+        fields = data[0]["fields"]
+        self.assertEqual(fields["institution"], self.education.institution)
+        self.assertEqual(fields["major"], self.education.major)
+        self.assertEqual(fields["level_display"], "Kuliah")
 
-    def test_empty_education_page(self):
+    def test_empty_education_json(self):
         Education.objects.all().delete()
-        response = self.client.get(reverse("main:show_education"))
+        response = self.client.get(reverse("main:get_education_json"))
 
+        self.assertEqual(response.json(), [])
+
+    def test_education_page_shows_empty_state_markup(self):
+        # halaman skeleton-nya harus tetap memuat teks kondisi kosong,
+        # walau tampil/tidaknya baru ditentukan JavaScript di browser
+        response = self.client.get(reverse("main:show_education"))
         self.assertContains(response, "Belum ada riwayat pendidikan yang ditambahkan.")
 
     def test_ongoing_education(self):
@@ -124,9 +135,12 @@ class EducationAccessTest(TestCase):
     def test_anonymous_can_read_list(self):
         response = self.client.get(reverse("main:show_education"))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, self.add_url)
-        self.assertNotContains(response, self.edit_url)
-        self.assertNotContains(response, self.delete_url)
+        # sejak Tutorial 05 tombol dirakit oleh JavaScript, jadi yang diperiksa
+        # adalah flag permission yang dikirim view lewat variabel JS di skeleton
+        self.assertContains(response, 'const CAN_ADD = "false"')
+        self.assertContains(response, 'const CAN_CHANGE = "false"')
+        self.assertContains(response, 'const CAN_DELETE = "false"')
+        self.assertContains(response, 'const IS_AUTHENTICATED = "false"')
 
     def test_anonymous_redirected_to_login(self):
         for url in (self.add_url, self.edit_url):
@@ -149,13 +163,13 @@ class EducationAccessTest(TestCase):
         self.assertEqual(self.client.post(self.delete_url).status_code, 403)
         self.assertEqual(Education.objects.count(), 1)
 
-    def test_regular_user_buttons_hidden_but_star_visible(self):
+    def test_regular_user_permission_flags(self):
         self.client.login(username="biasa", password="pass12345")
         response = self.client.get(reverse("main:show_education"))
-        self.assertNotContains(response, self.add_url)
-        self.assertNotContains(response, self.edit_url)
-        self.assertNotContains(response, self.delete_url)
-        self.assertContains(response, self.star_url)
+        self.assertContains(response, 'const CAN_ADD = "false"')
+        self.assertContains(response, 'const CAN_CHANGE = "false"')
+        self.assertContains(response, 'const CAN_DELETE = "false"')
+        self.assertContains(response, 'const IS_AUTHENTICATED = "true"')
 
     def test_star_toggle_max_one_per_user(self):
         self.client.login(username="biasa", password="pass12345")
@@ -169,11 +183,13 @@ class EducationAccessTest(TestCase):
         self.assertEqual(self.client.get(self.star_url).status_code, 405)
 
     def test_star_count_and_state_shown(self):
+        # sejak Tutorial 05, jumlah dan status star dibaca lewat JSON, bukan HTML halaman
         self.education.stars.add(self.user, self.editor)
         self.client.login(username="biasa", password="pass12345")
-        response = self.client.get(reverse("main:show_education"))
-        self.assertContains(response, "Batalkan star")
-        self.assertContains(response, "(2)")
+        response = self.client.get(reverse("main:get_education_json"))
+        fields = response.json()[0]["fields"]
+        self.assertTrue(fields["is_starred"])
+        self.assertEqual(fields["star_count"], 2)
 
     # --- editor ---
     def test_editor_can_update_but_not_create_or_delete(self):
@@ -194,12 +210,12 @@ class EducationAccessTest(TestCase):
         self.assertEqual(self.client.get(self.add_url).status_code, 403)
         self.assertEqual(self.client.post(self.delete_url).status_code, 403)
 
-    def test_editor_sees_only_edit_button(self):
+    def test_editor_permission_flags(self):
         self.client.login(username="editor", password="pass12345")
         response = self.client.get(reverse("main:show_education"))
-        self.assertContains(response, self.edit_url)
-        self.assertNotContains(response, self.add_url)
-        self.assertNotContains(response, self.delete_url)
+        self.assertContains(response, 'const CAN_ADD = "false"')
+        self.assertContains(response, 'const CAN_CHANGE = "true"')
+        self.assertContains(response, 'const CAN_DELETE = "false"')
 
     def test_editor_can_star(self):
         self.client.login(username="editor", password="pass12345")
@@ -212,9 +228,9 @@ class EducationAccessTest(TestCase):
         self.assertEqual(self.client.get(self.add_url).status_code, 200)
         self.assertEqual(self.client.get(self.edit_url).status_code, 200)
         response = self.client.get(reverse("main:show_education"))
-        self.assertContains(response, self.add_url)
-        self.assertContains(response, self.edit_url)
-        self.assertContains(response, self.delete_url)
+        self.assertContains(response, 'const CAN_ADD = "true"')
+        self.assertContains(response, 'const CAN_CHANGE = "true"')
+        self.assertContains(response, 'const CAN_DELETE = "true"')
         self.client.post(self.star_url)
         self.assertEqual(self.education.stars.count(), 1)
         self.client.post(self.delete_url)
@@ -243,3 +259,80 @@ class EducationAccessTest(TestCase):
         self.assertNotContains(response, "stars")
         self.assertNotContains(response, "password")
         self.assertNotContains(response, "biasa")
+
+# ---------- Tutorial 05: AJAX tambah pendidikan dan proteksi XSS ----------
+
+class EducationAjaxTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("biasa2", password="pass12345")
+        self.editor = User.objects.create_user("editor2", password="pass12345")
+        group = Group.objects.create(name="Editor2")
+        group.permissions.add(Permission.objects.get(codename="change_education"))
+        self.editor.groups.add(group)
+        self.owner = User.objects.create_superuser("owner2", password="pass12345")
+
+        self.ajax_url = reverse("main:create_education_ajax")
+        self.valid_payload = {
+            "institution": "Universitas Indonesia",
+            "level": "kuliah",
+            "major": "Ilmu Komputer",
+            "started_at": "2025-08-01",
+        }
+
+    def test_anonymous_forbidden(self):
+        response = self.client.post(self.ajax_url, self.valid_payload)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Education.objects.count(), 0)
+
+    def test_regular_user_forbidden(self):
+        self.client.login(username="biasa2", password="pass12345")
+        response = self.client.post(self.ajax_url, self.valid_payload)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Education.objects.count(), 0)
+
+    def test_editor_forbidden(self):
+        # Editor cuma boleh mengubah, bukan menambah
+        self.client.login(username="editor2", password="pass12345")
+        response = self.client.post(self.ajax_url, self.valid_payload)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Education.objects.count(), 0)
+
+    def test_get_not_allowed(self):
+        self.client.login(username="owner2", password="pass12345")
+        response = self.client.get(self.ajax_url)
+        self.assertEqual(response.status_code, 405)
+
+    def test_owner_can_create(self):
+        self.client.login(username="owner2", password="pass12345")
+        response = self.client.post(self.ajax_url, self.valid_payload)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Education.objects.count(), 1)
+        self.assertIn("pk", response.json())
+
+    def test_owner_invalid_data_returns_400(self):
+        self.client.login(username="owner2", password="pass12345")
+        payload = {**self.valid_payload, "institution": ""}
+        response = self.client.post(self.ajax_url, payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("institution", response.json()["errors"])
+        self.assertEqual(Education.objects.count(), 0)
+
+    def test_html_tags_stripped_from_institution_and_major(self):
+        # lapisan pertahanan kedua: tag HTML dibuang sejak data masuk (Tutorial 05)
+        self.client.login(username="owner2", password="pass12345")
+        payload = {
+            **self.valid_payload,
+            "institution": "<b>Universitas</b> Indonesia",
+            "major": "<script>alert(1)</script>Ilmu Komputer",
+        }
+        self.client.post(self.ajax_url, payload)
+        education = Education.objects.get()
+        self.assertEqual(education.institution, "Universitas Indonesia")
+        self.assertEqual(education.major, "alert(1)Ilmu Komputer")
+
+    def test_institution_with_only_html_tags_rejected(self):
+        self.client.login(username="owner2", password="pass12345")
+        payload = {**self.valid_payload, "institution": "<img src=x onerror=alert(1)>"}
+        response = self.client.post(self.ajax_url, payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Education.objects.count(), 0)

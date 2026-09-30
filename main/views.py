@@ -4,8 +4,7 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core import serializers
-from django.db.models import Count
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -48,7 +47,9 @@ def get_experience_json(request):
     return HttpResponse(experience_json, content_type="application/json")
 
 
-# ambil data Education dalam format JSON, dipakai juga sama show_education di bawah
+# ambil data Education dalam format JSON, dirakit manual (Tutorial 05) supaya
+# bisa menyisipkan info star (is_starred tergantung siapa yang sedang login,
+# jadi tidak bisa dilakukan serializers.serialize bawaan seperti sebelumnya)
 def get_education_json(request):
     institution_query = request.GET.get("institution", "").strip()
     education_qs = Education.objects.all().order_by("started_at")
@@ -56,42 +57,39 @@ def get_education_json(request):
     if institution_query:
         education_qs = education_qs.filter(institution__icontains=institution_query)
 
-    # whitelist field: field "stars" (daftar id user) sengaja TIDAK ikut diekspos
-    education_json = serializers.serialize(
-        "json",
-        education_qs,
-        fields=("institution", "level", "major", "started_at", "ended_at"),
-    )
-    return HttpResponse(education_json, content_type="application/json")
-
-
-# nampilin daftar riwayat pendidikan, sekarang lewat JSON dulu baru di-deserialize
-# (memang keliatan muter-muter, tapi ini contoh alur data delivery dari Tutorial 03)
-def show_education(request):
-    json_response = get_education_json(request)
-    education_objects = serializers.deserialize(
-        "json",
-        json_response.content.decode("utf-8"),
-    )
-    education_list = [item.object for item in education_objects]
-
-    # info star: 1 query buat total per Education, 1 query buat star milik user yang login
-    star_counts = dict(
-        Education.objects.annotate(total=Count("stars")).values_list("pk", "total")
-    )
     starred_ids = set()
     if request.user.is_authenticated:
         starred_ids = set(request.user.starred_educations.values_list("pk", flat=True))
-    for education in education_list:
-        education.star_count = star_counts.get(education.pk, 0)
-        education.is_starred = education.pk in starred_ids
 
+    data = []
+    for education in education_qs:
+        data.append({
+            "pk": str(education.pk),
+            "fields": {
+                # field "stars" (daftar id user) sengaja TIDAK ikut diekspos
+                "institution": education.institution,
+                "level": education.level,
+                "level_display": education.get_level_display(),
+                "major": education.major,
+                "started_year": education.started_at.year,
+                "ended_year": education.ended_at.year if education.ended_at else None,
+                "is_ongoing": education.is_ongoing,
+                "star_count": education.stars.count(),
+                "is_starred": education.pk in starred_ids,
+            },
+        })
+
+    return JsonResponse(data, safe=False)
+
+
+# cuma nampilin kerangka halaman; datanya diambil terpisah lewat AJAX (Tutorial 05)
+def show_education(request):
     institution_query = request.GET.get("institution", "").strip()
 
     context = {
         "name": "Immanuel Marvin Pandjaitan",
-        "education_list": education_list,
         "institution_query": institution_query,
+        "form": EducationForm(),
     }
     return render(request, "education.html", context)
 
@@ -145,6 +143,31 @@ def delete_education(request, education_id):
 
     return redirect("main:show_education")
 
+
+# ---------- AJAX tambah pendidikan (Tutorial 05) ----------
+
+@require_POST
+def create_education_ajax(request):
+    # bukan @login_required: fetch akan ikut redirect ke halaman login (200 HTML)
+    # kalau pakai itu, jadi JS tidak bisa mengenali kegagalannya. AnonymousUser
+    # otomatis has_perm False juga, jadi satu pengecekan ini menolak pengunjung
+    # anonim maupun pengguna yang tidak berhak, dengan respons JSON yang jelas.
+    if not request.user.has_perm("main.add_education"):
+        return JsonResponse(
+            {"message": "Kamu tidak berhak menambahkan riwayat pendidikan."},
+            status=403,
+        )
+
+    form = EducationForm(request.POST)
+    if form.is_valid():
+        education = form.save()
+        return JsonResponse(
+            {"message": "Riwayat pendidikan berhasil ditambahkan.", "pk": str(education.id)},
+            status=201,
+        )
+    return JsonResponse({"errors": form.errors.get_json_data()}, status=400)
+
+
 # ---------- Star (Tugas 4) ----------
 
 @login_required
@@ -184,7 +207,6 @@ def login_user(request):
         user = form.get_user()
         login(request, user)
 
-        # kalau tadi dilempar ke login oleh @login_required, balik ke halaman asal (?next=...)
         next_url = request.POST.get("next") or request.GET.get("next")
         if not next_url or not url_has_allowed_host_and_scheme(
             next_url, allowed_hosts={request.get_host()}

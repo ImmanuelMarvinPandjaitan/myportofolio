@@ -34,31 +34,42 @@ class MainTest(TestCase):
         self.assertEqual(self.experience.category, "part-time")
         self.assertTrue(self.experience.is_ongoing)
 
-    def test_experience_page(self):
+    def test_experience_page_is_skeleton(self):
+        # sejak Tugas 5, show_experience cuma kerangka halaman; datanya lewat AJAX
         response = self.client.get(reverse("main:show_experience"))
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "experience.html")
-        self.assertContains(response, self.experience.title)
-        self.assertContains(response, self.experience.description)
-        self.assertContains(response, "Part-Time")
-        self.assertContains(response, "Sedang berlangsung")
         self.assertContains(response, f'href="{reverse("main:show_main")}"')
 
-    def test_empty_experience_page(self):
-        Experience.objects.all().delete()
-        response = self.client.get(reverse("main:show_experience"))
+    def test_experience_json_shows_data(self):
+        response = self.client.get(reverse("main:get_experience_json"))
+        data = response.json()
 
+        self.assertEqual(len(data), 1)
+        fields = data[0]["fields"]
+        self.assertEqual(fields["title"], self.experience.title)
+        self.assertEqual(fields["description"], self.experience.description)
+        self.assertEqual(fields["category_display"], "Part-Time")
+        self.assertTrue(fields["is_ongoing"])
+
+    def test_empty_experience_json(self):
+        Experience.objects.all().delete()
+        response = self.client.get(reverse("main:get_experience_json"))
+
+        self.assertEqual(response.json(), [])
+
+    def test_experience_page_shows_empty_state_markup(self):
+        response = self.client.get(reverse("main:show_experience"))
         self.assertContains(response, "Belum ada pengalaman yang ditambahkan.")
 
     def test_completed_experience(self):
         self.experience.ended_at = timezone.now()
         self.experience.save()
-        response = self.client.get(reverse("main:show_experience"))
+        response = self.client.get(reverse("main:get_experience_json"))
 
         self.assertFalse(self.experience.is_ongoing)
-        self.assertContains(response, "Selesai")
-        self.assertNotContains(response, "Sedang berlangsung")
+        self.assertFalse(response.json()[0]["fields"]["is_ongoing"])
 
 
 class EducationTest(TestCase):
@@ -336,3 +347,134 @@ class EducationAjaxTest(TestCase):
         response = self.client.post(self.ajax_url, payload)
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Education.objects.count(), 0)
+
+
+# ---------- Tugas 5: Experience — autentikasi, otorisasi, AJAX, dan XSS ----------
+
+class ExperienceAccessTest(TestCase):
+    def setUp(self):
+        self.experience = Experience.objects.create(
+            title="Asisten Lab",
+            description="Membantu praktikum.",
+            category="part-time",
+        )
+        self.user = User.objects.create_user("exp_biasa", password="pass12345")
+        self.editor = User.objects.create_user("exp_editor", password="pass12345")
+        self.owner = User.objects.create_superuser("exp_owner", password="pass12345")
+
+        group = Group.objects.create(name="EditorExperience")
+        group.permissions.add(Permission.objects.get(codename="change_experience"))
+        self.editor.groups.add(group)
+
+        self.add_url = reverse("main:create_experience")
+        self.edit_url = reverse("main:update_experience", args=[self.experience.id])
+        self.delete_url = reverse("main:delete_experience", args=[self.experience.id])
+        self.star_url = reverse("main:toggle_star_experience", args=[self.experience.id])
+        self.login_url = reverse("main:login")
+
+    def test_anonymous_can_read_but_flags_false(self):
+        response = self.client.get(reverse("main:show_experience"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'const CAN_ADD = "false"')
+        self.assertContains(response, 'const CAN_CHANGE = "false"')
+        self.assertContains(response, 'const CAN_DELETE = "false"')
+        self.assertContains(response, 'const IS_AUTHENTICATED = "false"')
+
+    def test_anonymous_redirected_to_login(self):
+        for url in (self.add_url, self.edit_url):
+            response = self.client.get(url)
+            self.assertRedirects(
+                response, f"{self.login_url}?next={url}", fetch_redirect_response=False
+            )
+        for url in (self.delete_url, self.star_url):
+            response = self.client.post(url)
+            self.assertRedirects(
+                response, f"{self.login_url}?next={url}", fetch_redirect_response=False
+            )
+        self.assertEqual(Experience.objects.count(), 1)
+
+    def test_regular_user_gets_403(self):
+        self.client.login(username="exp_biasa", password="pass12345")
+        self.assertEqual(self.client.get(self.add_url).status_code, 403)
+        self.assertEqual(self.client.get(self.edit_url).status_code, 403)
+        self.assertEqual(self.client.post(self.delete_url).status_code, 403)
+
+    def test_regular_user_can_star(self):
+        self.client.login(username="exp_biasa", password="pass12345")
+        self.client.post(self.star_url)
+        self.assertEqual(self.experience.stars.count(), 1)
+        self.client.post(self.star_url)  # kedua kali = batal
+        self.assertEqual(self.experience.stars.count(), 0)
+
+    def test_editor_can_change_but_not_add_or_delete(self):
+        self.client.login(username="exp_editor", password="pass12345")
+        self.assertEqual(self.client.get(self.edit_url).status_code, 200)
+        self.assertEqual(self.client.get(self.add_url).status_code, 403)
+        self.assertEqual(self.client.post(self.delete_url).status_code, 403)
+
+    def test_owner_permission_flags(self):
+        self.client.login(username="exp_owner", password="pass12345")
+        response = self.client.get(reverse("main:show_experience"))
+        self.assertContains(response, 'const CAN_ADD = "true"')
+        self.assertContains(response, 'const CAN_CHANGE = "true"')
+        self.assertContains(response, 'const CAN_DELETE = "true"')
+
+    def test_owner_can_delete(self):
+        self.client.login(username="exp_owner", password="pass12345")
+        self.client.post(self.delete_url)
+        self.assertEqual(Experience.objects.count(), 0)
+
+
+class ExperienceAjaxTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("exp_biasa2", password="pass12345")
+        self.owner = User.objects.create_superuser("exp_owner2", password="pass12345")
+        self.ajax_url = reverse("main:create_experience_ajax")
+        self.valid_payload = {
+            "title": "Panitia OSKM",
+            "description": "Membantu acara penyambutan mahasiswa baru.",
+            "category": "volunteer",
+        }
+
+    def test_anonymous_forbidden(self):
+        response = self.client.post(self.ajax_url, self.valid_payload)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Experience.objects.count(), 0)
+
+    def test_regular_user_forbidden(self):
+        self.client.login(username="exp_biasa2", password="pass12345")
+        response = self.client.post(self.ajax_url, self.valid_payload)
+        self.assertEqual(response.status_code, 403)
+
+    def test_owner_can_create(self):
+        self.client.login(username="exp_owner2", password="pass12345")
+        response = self.client.post(self.ajax_url, self.valid_payload)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Experience.objects.count(), 1)
+        self.assertIn("pk", response.json())
+
+    def test_owner_invalid_data_returns_400(self):
+        self.client.login(username="exp_owner2", password="pass12345")
+        payload = {**self.valid_payload, "title": ""}
+        response = self.client.post(self.ajax_url, payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("title", response.json()["errors"])
+
+    def test_html_tags_stripped_from_title_and_description(self):
+        self.client.login(username="exp_owner2", password="pass12345")
+        payload = {
+            **self.valid_payload,
+            "title": "<b>Panitia</b> OSKM",
+            "description": "<script>alert(1)</script>Seru banget",
+        }
+        self.client.post(self.ajax_url, payload)
+        experience = Experience.objects.get()
+        self.assertEqual(experience.title, "Panitia OSKM")
+        self.assertEqual(experience.description, "alert(1)Seru banget")
+
+    def test_title_with_only_html_tags_rejected(self):
+        self.client.login(username="exp_owner2", password="pass12345")
+        payload = {**self.valid_payload, "title": "<img src=x onerror=alert(1)>"}
+        response = self.client.post(self.ajax_url, payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Experience.objects.count(), 0)

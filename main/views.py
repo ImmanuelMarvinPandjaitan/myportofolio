@@ -3,13 +3,12 @@ from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django.core import serializers
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from main.models import Education, Experience
-from main.forms import EducationForm
+from main.forms import EducationForm, ExperienceForm
 
 def show_main(request):
     last_login = request.COOKIES.get(
@@ -28,24 +27,48 @@ def show_main(request):
     return render(request, "index.html", context)
 
 
+# cuma nampilin kerangka halaman; datanya diambil terpisah lewat AJAX (Tutorial 05/Tugas 5)
 def show_experience(request):
+    title_query = request.GET.get("title", "").strip()
+
     context = {
         "name": "Immanuel Marvin Pandjaitan",
-        "experience_list": Experience.objects.all(),
+        "title_query": title_query,
+        "form": ExperienceForm(),
     }
     return render(request, "experience.html", context)
 
-# bonus: ambil data Experience dalam format JSON juga, pola sama kayak get_education_json
+
+# JSON dirakit manual (bukan serializers.serialize) supaya bisa menyisipkan
+# info star per pengguna, pola sama persis seperti get_education_json
 def get_experience_json(request):
     title_query = request.GET.get("title", "").strip()
-    experience_qs = Experience.objects.all()
+    experience_qs = Experience.objects.all().order_by("started_at")
 
     if title_query:
         experience_qs = experience_qs.filter(title__icontains=title_query)
 
-    experience_json = serializers.serialize("json", experience_qs)
-    return HttpResponse(experience_json, content_type="application/json")
+    starred_ids = set()
+    if request.user.is_authenticated:
+        starred_ids = set(request.user.starred_experiences.values_list("pk", flat=True))
 
+    data = []
+    for experience in experience_qs:
+        data.append({
+            "pk": str(experience.pk),
+            "fields": {
+                "title": experience.title,
+                "description": experience.description,
+                "category": experience.category,
+                "category_display": experience.get_category_display(),
+                "thumbnail": experience.thumbnail,
+                "is_ongoing": experience.is_ongoing,
+                "star_count": experience.stars.count(),
+                "is_starred": experience.pk in starred_ids,
+            },
+        })
+
+    return JsonResponse(data, safe=False)
 
 # ambil data Education dalam format JSON, dirakit manual (Tutorial 05) supaya
 # bisa menyisipkan info star (is_starred tergantung siapa yang sedang login,
@@ -182,6 +205,86 @@ def toggle_star(request, education_id):
 
     return redirect("main:show_education")
 
+# ---------- CRUD + AJAX untuk Experience (Tugas 5, pola sama dengan Education) ----------
+
+@login_required
+@permission_required("main.add_experience", raise_exception=True)
+def create_experience(request):
+    form = ExperienceForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Pengalaman baru berhasil ditambahkan!")
+        return redirect("main:show_experience")
+
+    context = {
+        "name": "Immanuel Marvin Pandjaitan",
+        "form": form,
+    }
+    return render(request, "experience_form.html", context)
+
+
+@login_required
+@permission_required("main.change_experience", raise_exception=True)
+def update_experience(request, experience_id):
+    experience = get_object_or_404(Experience, pk=experience_id)
+    form = ExperienceForm(request.POST or None, instance=experience)
+
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Pengalaman berhasil diperbarui!")
+        return redirect("main:show_experience")
+
+    context = {
+        "name": "Immanuel Marvin Pandjaitan",
+        "form": form,
+        "experience": experience,
+    }
+    return render(request, "experience_form.html", context)
+
+
+@login_required
+@permission_required("main.delete_experience", raise_exception=True)
+def delete_experience(request, experience_id):
+    experience = get_object_or_404(Experience, pk=experience_id)
+
+    if request.method == "POST":
+        experience.delete()
+        messages.success(request, "Pengalaman berhasil dihapus!")
+        return redirect("main:show_experience")
+
+    return redirect("main:show_experience")
+
+
+@login_required
+@require_POST
+def toggle_star_experience(request, experience_id):
+    experience = get_object_or_404(Experience, pk=experience_id)
+
+    if experience.stars.filter(pk=request.user.pk).exists():
+        experience.stars.remove(request.user)
+    else:
+        experience.stars.add(request.user)
+
+    return redirect("main:show_experience")
+
+
+@require_POST
+def create_experience_ajax(request):
+    if not request.user.has_perm("main.add_experience"):
+        return JsonResponse(
+            {"message": "Kamu tidak berhak menambahkan pengalaman."},
+            status=403,
+        )
+
+    form = ExperienceForm(request.POST)
+    if form.is_valid():
+        experience = form.save()
+        return JsonResponse(
+            {"message": "Pengalaman berhasil ditambahkan.", "pk": str(experience.id)},
+            status=201,
+        )
+    return JsonResponse({"errors": form.errors.get_json_data()}, status=400)
 
 # ---------- Autentikasi (Tutorial 04, Bagian 1) ----------
 

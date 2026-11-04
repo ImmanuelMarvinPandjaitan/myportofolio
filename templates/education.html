@@ -4,7 +4,7 @@
 {% endblock meta %}
 {% block content %}
     <main>
-        <!-- dulunya render langsung dari server, sekarang dimuat via AJAX (Tutorial 05) -->
+        <!-- data dimuat lewat AJAX dari API DRF (Tutorial 07) -->
         <section class="education" id="pendidikan">
             <div class="container">
                 <p class="section-kicker">Riwayat Pendidikan</p>
@@ -54,15 +54,21 @@
         {% include "components/education_form_modal.html" %}
     {% endif %}
 
+    {# Menjamin cookie csrftoken selalu dibuat, bahkan untuk pengguna biasa yang tidak melihat modal. #}
+    {# Script di bawah membaca tokennya dari cookie dan mengirimnya lewat header X-CSRFToken. #}
+    {% csrf_token %}
     <script>
         // ---------- Konfigurasi ----------
-        const BASE_EDUCATION_ENDPOINT = "{% url 'main:get_education_json' %}";
+        const NULL_UUID = '00000000-0000-0000-0000-000000000000';
+        const BASE_EDUCATION_ENDPOINT = "{% url 'api:education-list' %}";
+        const DETAIL_EDUCATION_ENDPOINT = "{% url 'api:education-detail' '00000000-0000-0000-0000-000000000000' %}";
+        const STAR_EDUCATION_ENDPOINT = "{% url 'api:education-star' '00000000-0000-0000-0000-000000000000' %}";
+        const UPDATE_EDUCATION_PAGE = "{% url 'main:update_education' '00000000-0000-0000-0000-000000000000' %}";
+        const LOGIN_URL = "{% url 'main:login' %}";
         const CAN_ADD = "{{ perms.main.add_education|yesno:'true,false' }}" === "true";
         const CAN_CHANGE = "{{ perms.main.change_education|yesno:'true,false' }}" === "true";
         const CAN_DELETE = "{{ perms.main.delete_education|yesno:'true,false' }}" === "true";
         const IS_AUTHENTICATED = "{{ user.is_authenticated|yesno:'true,false' }}" === "true";
-        const LOGIN_URL = "{% url 'main:login' %}";
-        let educationAbortController;
 
         // ---------- Elemen DOM ----------
         const loadingState = document.getElementById('loading');
@@ -71,17 +77,30 @@
         const listContainer = document.getElementById('list');
         const searchForm = document.getElementById('education-search-form');
         const searchInput = document.getElementById('search-input');
+        const educationForm = document.getElementById('education-form');
 
-        // ---------- Escaping anti-XSS ----------
-        // Mengubah karakter khusus HTML menjadi entity agar ditampilkan sebagai teks,
-        // meniru auto-escaping Django yang hilang begitu kita memakai innerHTML manual.
+        let educationAbortController;
+        let searchDebounceTimer;
+
+        // ---------- Helper ----------
+        function getCookie(name) {
+            const prefix = `${name}=`;
+            const cookie = document.cookie.split(';').map(value => value.trim())
+                .find(value => value.startsWith(prefix));
+            return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
+        }
+
+        // Mengubah karakter khusus HTML menjadi entity agar ditampilkan sebagai teks
+        // (anti-XSS): pengganti auto-escaping Django saat HTML dirakit lewat innerHTML.
         function escapeHtml(value) {
-            return String(value ?? '')
-                .replaceAll('&', '&amp;')
-                .replaceAll('<', '&lt;')
-                .replaceAll('>', '&gt;')
-                .replaceAll('"', '&quot;')
-                .replaceAll("'", '&#39;');
+            return String(value ?? '').replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+        }
+
+        // Dummy UUID pada pola URL diganti dengan id asli dari data API
+        function withId(pattern, id) {
+            return pattern.replace(NULL_UUID, id);
         }
 
         function displayPageSection({ showLoading = false, showError = false, showEmpty = false, showList = false }) {
@@ -91,102 +110,70 @@
             listContainer.classList.toggle('hide', !showList);
         }
 
-        // ---------- Membuat satu <article class="education-item"> dari data JSON ----------
-        function buildEducationItemElement(item) {
-            const education = item.fields;
-            const educationId = item.pk;
+        // ---------- Membuat satu <article class="education-item"> dari objek API ----------
+        // Kontrak DRF: objek datar (education.institution), bukan {pk, fields} seperti JSON lama
+        function buildEducationItemElement(education) {
+            const article = document.createElement('article');
+            article.className = 'education-item';
 
-            const articleElement = document.createElement('article');
-            articleElement.className = 'education-item';
-
+            const startYear = education.started_at.slice(0, 4);
             const yearRange = education.is_ongoing
-                ? `${education.started_year} &ndash; sekarang`
-                : `${education.started_year} &ndash; ${education.ended_year}`;
+                ? `${startYear} &ndash; sekarang`
+                : `${startYear} &ndash; ${education.ended_at.slice(0, 4)}`;
 
-            const majorHtml = education.major
-                ? `<p>${escapeHtml(education.major)}</p>`
-                : '';
+            const major = education.major ? `<p>${escapeHtml(education.major)}</p>` : '';
 
-            // Dummy UUID digantikan oleh id asli dari data JSON, pola sama seperti tutorial
-            const updateUrl = "{% url 'main:update_education' '00000000-0000-0000-0000-000000000000' %}"
-                .replace('00000000-0000-0000-0000-000000000000', educationId);
-            const deleteUrl = "{% url 'main:delete_education' '00000000-0000-0000-0000-000000000000' %}"
-                .replace('00000000-0000-0000-0000-000000000000', educationId);
-            const starUrl = "{% url 'main:toggle_star' '00000000-0000-0000-0000-000000000000' %}"
-                .replace('00000000-0000-0000-0000-000000000000', educationId);
-
-            const starClass = education.is_starred ? ' is-starred' : '';
-            const starLabel = education.is_starred ? '\u2605 Batalkan star' : '\u2606 Beri star';
-
-            const starActionHtml = IS_AUTHENTICATED
-                ? `<form method="post" action="${starUrl}" class="star-form">
-                        {% csrf_token %}
-                        <button type="submit" class="button button-secondary star-button${starClass}">
-                            ${starLabel} (${education.star_count})
-                        </button>
-                   </form>`
-                : `<a href="${LOGIN_URL}?next=${encodeURIComponent(window.location.pathname)}" class="button button-secondary star-button">
-                        \u2606 Login untuk beri star (${education.star_count})
+            const star = IS_AUTHENTICATED
+                ? `<button type="button"
+                           class="button button-secondary star-button${education.is_starred ? ' is-starred' : ''}"
+                           data-action="star" data-id="${escapeHtml(education.id)}">
+                       ${education.is_starred ? '\u2605 Batalkan star' : '\u2606 Beri star'} (${education.star_count})
+                   </button>`
+                : `<a href="${LOGIN_URL}?next=${encodeURIComponent(window.location.pathname)}"
+                      class="button button-secondary star-button">
+                       \u2606 Login untuk beri star (${education.star_count})
                    </a>`;
 
-            const changeActionHtml = CAN_CHANGE
-                ? `<a href="${updateUrl}" class="button button-secondary">Edit</a>`
+            // edit tetap lewat halaman form Tugas 3/4 (tidak dihapus di tutorial ini)
+            const edit = CAN_CHANGE
+                ? `<a href="${withId(UPDATE_EDUCATION_PAGE, escapeHtml(education.id))}" class="button button-secondary">Edit</a>`
                 : '';
 
-            const deleteActionHtml = CAN_DELETE
-                ? `<form method="post" action="${deleteUrl}" style="display:inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="button button-danger"
-                                onclick="return confirm('Yakin ingin menghapus riwayat pendidikan ini?');">
-                            Hapus
-                        </button>
-                   </form>`
+            const remove = CAN_DELETE
+                ? `<button type="button" class="button button-danger"
+                           data-action="delete" data-id="${escapeHtml(education.id)}">Hapus</button>`
                 : '';
 
-            articleElement.innerHTML = `
+            article.innerHTML = `
                 <span class="education-year">${yearRange}</span>
                 <div class="education-info">
                     <h3>${escapeHtml(education.institution)} <small>(${escapeHtml(education.level_display)})</small></h3>
-                    ${majorHtml}
-                    <div class="education-actions">
-                        ${starActionHtml}
-                        ${changeActionHtml}
-                        ${deleteActionHtml}
-                    </div>
-                </div>
-            `;
-            return articleElement;
+                    ${major}
+                    <div class="education-actions">${star}${edit}${remove}</div>
+                </div>`;
+            return article;
         }
 
-        // ---------- Ambil data lewat fetch() ----------
-        async function fetchEducations(searchQuery = "") {
+        // ---------- Ambil daftar lewat GET /api/v1/education/ ----------
+        async function fetchEducations(searchQuery = '') {
             if (educationAbortController) educationAbortController.abort();
             educationAbortController = new AbortController();
 
             try {
                 displayPageSection({ showLoading: true });
 
-                const url = searchQuery
-                    ? `${BASE_EDUCATION_ENDPOINT}?institution=${encodeURIComponent(searchQuery)}`
-                    : BASE_EDUCATION_ENDPOINT;
+                const url = new URL(BASE_EDUCATION_ENDPOINT, window.location.origin);
+                if (searchQuery) url.searchParams.set('institution', searchQuery);
 
                 const response = await fetch(url, {
-                    headers: { 'Accept': 'application/json' },
+                    headers: { Accept: 'application/json' },
                     signal: educationAbortController.signal,
                 });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-                if (!response.ok) throw new Error('Failed to fetch data');
-                const educationData = await response.json();
-
-                if (educationData.length === 0) {
-                    displayPageSection({ showEmpty: true });
-                } else {
-                    listContainer.innerHTML = '';
-                    educationData.forEach(item => {
-                        listContainer.appendChild(buildEducationItemElement(item));
-                    });
-                    displayPageSection({ showList: true });
-                }
+                const educations = await response.json();
+                listContainer.replaceChildren(...educations.map(buildEducationItemElement));
+                displayPageSection({ showList: educations.length > 0, showEmpty: educations.length === 0 });
             } catch (error) {
                 if (error.name === 'AbortError') return;
                 console.error('Error loading education:', error);
@@ -194,84 +181,97 @@
             }
         }
 
-        // ---------- Search debouncing ----------
-        const SEARCH_DEBOUNCE_DELAY = 300;
-        let searchDebounceTimer;
-
-        function searchEducations() {
-            fetchEducations(searchInput.value.trim());
+        // ---------- Tulis data (POST/PATCH/DELETE) lewat satu fungsi ----------
+        // Menggabungkan pemilihan method, body JSON, token CSRF, dan penanganan error.
+        function apiErrorMessage(data, status) {
+            const messages = Object.values(data).flat().filter(value => typeof value === 'string');
+            return messages.join(' ') || `Permintaan gagal (HTTP ${status}).`;
         }
 
-        searchInput.addEventListener("input", function () {
-            clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = setTimeout(searchEducations, SEARCH_DEBOUNCE_DELAY);
-        });
-
-        searchForm.addEventListener("submit", function (event) {
-            event.preventDefault();
-            clearTimeout(searchDebounceTimer);
-            searchEducations();
-        });
-
-        // ---------- Modal tambah pendidikan ----------
-        function closeEducationModal() {
-            const modal = document.getElementById("add-education-modal");
-            if (modal) modal.hidePopover();
+        async function writeEducation(url, method, payload) {
+            const response = await fetch(url, {
+                method,
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: payload === undefined ? undefined : JSON.stringify(payload),
+            });
+            if (response.status === 204) return null;  // DELETE: body kosong, jangan panggil .json()
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+            return data;
         }
 
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
-            }
-            return cookieValue;
-        }
-
-        const CREATE_EDUCATION_ENDPOINT = "{% url 'main:create_education_ajax' %}";
-        const educationForm = document.getElementById('education-form');
-
+        // ---------- Tambah pendidikan lewat modal ----------
         async function addEducation(event) {
             event.preventDefault();
-            const submitButton = educationForm.querySelector('button[type="submit"]');
-            submitButton.disabled = true;
+            const button = educationForm.querySelector('button[type="submit"]');
+            button.disabled = true;
 
             try {
-                const response = await fetch(CREATE_EDUCATION_ENDPOINT, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': getCookie('csrftoken') },
-                    body: new FormData(educationForm),
-                });
-                const result = await response.json().catch(() => ({}));
+                const fields = new FormData(educationForm);
+                const payload = {
+                    institution: fields.get('institution'),
+                    level: fields.get('level'),
+                    major: fields.get('major'),
+                    started_at: fields.get('started_at'),
+                    // tanggal kosong harus dikirim null, bukan "" (JSON "" bukan tanggal valid)
+                    ended_at: fields.get('ended_at') || null,
+                };
+                await writeEducation(BASE_EDUCATION_ENDPOINT, 'POST', payload);
 
-                if (response.ok) {
-                    educationForm.reset();
-                    closeEducationModal();
-                    showToast('Berhasil', 'Riwayat pendidikan baru berhasil ditambahkan!', 'success');
-                    fetchEducations(searchInput.value.trim());
-                } else {
-                    const errorMessages = result.errors
-                        ? Object.values(result.errors).flat().map(error => error.message)
-                        : [result.message || `Terjadi kesalahan (status ${response.status}).`];
-                    showToast('Gagal menambahkan pendidikan', errorMessages.join(' '), 'error');
-                }
+                educationForm.reset();
+                document.getElementById('add-education-modal').hidePopover();
+                showToast('Berhasil', 'Riwayat pendidikan baru berhasil ditambahkan!', 'success');
+                await fetchEducations(searchInput.value.trim());
             } catch (error) {
-                console.error('Error adding education:', error);
-                showToast('Gagal menambahkan pendidikan', 'Tidak dapat terhubung ke server. Silakan coba lagi.', 'error');
+                showToast('Gagal menambahkan pendidikan', error.message, 'error');
             } finally {
-                submitButton.disabled = false;
+                button.disabled = false;
             }
         }
 
-        if (educationForm) {
-            educationForm.addEventListener('submit', addEducation);
-        }
+        // modal hanya dirender untuk yang punya izin add_education, jadi bagi
+        // pengunjung lain educationForm bernilai null; tanpa pengecekan ini
+        // addEventListener akan error dan menghentikan sisa skrip
+        if (educationForm) educationForm.addEventListener('submit', addEducation);
+
+        // ---------- Star dan hapus: event delegation di wadah daftar ----------
+        // Listener dipasang di wadah, bukan di tiap tombol, jadi tombol yang baru
+        // dibuat setelah daftar dirender ulang tetap tertangani.
+        listContainer.addEventListener('click', async function (event) {
+            const button = event.target.closest('button[data-action]');
+            if (!button || button.disabled) return;
+
+            const action = button.dataset.action;
+            if (action === 'delete' && !window.confirm('Yakin ingin menghapus riwayat pendidikan ini?')) return;
+
+            button.disabled = true;  // star adalah toggle: cegah klik ganda selama request berjalan
+            try {
+                const pattern = action === 'star' ? STAR_EDUCATION_ENDPOINT : DETAIL_EDUCATION_ENDPOINT;
+                await writeEducation(withId(pattern, button.dataset.id), action === 'star' ? 'POST' : 'DELETE');
+                showToast('Berhasil', action === 'star' ? 'Star diperbarui.' : 'Riwayat pendidikan dihapus.', 'success');
+                await fetchEducations(searchInput.value.trim());
+            } catch (error) {
+                showToast('Permintaan gagal', error.message, 'error');
+            } finally {
+                button.disabled = false;
+            }
+        });
+
+        // ---------- Pencarian dengan debouncing (300 ms) ----------
+        searchInput.addEventListener('input', function () {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => fetchEducations(searchInput.value.trim()), 300);
+        });
+
+        searchForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            clearTimeout(searchDebounceTimer);
+            fetchEducations(searchInput.value.trim());
+        });
 
         // ---------- Mulai ----------
         fetchEducations(searchInput.value.trim());

@@ -35,6 +35,8 @@ def show_experience(request):
         "name": "Immanuel Marvin Pandjaitan",
         "title_query": title_query,
         "form": ExperienceForm(),
+        # form edit memakai prefix id berbeda supaya id input tidak bentrok dengan form tambah
+        "edit_form": ExperienceForm(auto_id="id_edit_%s"),
     }
     return render(request, "experience.html", context)
 

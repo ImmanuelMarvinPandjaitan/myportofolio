@@ -1,7 +1,7 @@
 from django.utils.html import strip_tags
 from rest_framework import serializers
 
-from main.models import Education
+from main.models import Education, Experience
 
 
 class EducationSerializer(serializers.ModelSerializer):
@@ -42,6 +42,53 @@ class EducationSerializer(serializers.ModelSerializer):
                 {"ended_at": "Tanggal selesai tidak boleh sebelum tanggal mulai."}
             )
         return attrs
+
+    def get_star_count(self, obj):
+        return len(obj.stars.all())
+
+    def get_is_starred(self, obj):
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        return any(user.pk == request.user.pk for user in obj.stars.all())
+
+    
+
+class ExperienceSerializer(serializers.ModelSerializer):
+    # field hanya-baca: dihitung server, tidak pernah diterima dari klien
+    category_display = serializers.CharField(source="get_category_display", read_only=True)
+    is_ongoing = serializers.BooleanField(read_only=True)
+    star_count = serializers.SerializerMethodField()
+    is_starred = serializers.SerializerMethodField()
+    # <input type="date"> mengirim "YYYY-MM-DD", sedangkan DateTimeField DRF bawaan
+    # hanya menerima ISO 8601 lengkap. Terima keduanya; null = masih berlangsung.
+    ended_at = serializers.DateTimeField(
+        required=False, allow_null=True, input_formats=["iso-8601", "%Y-%m-%d"],
+    )
+
+    class Meta:
+        model = Experience
+        # whitelist eksplisit: relasi "stars" mentah (daftar id user) tidak diekspos
+        fields = [
+            "id", "title", "description", "category", "category_display",
+            "thumbnail", "started_at", "ended_at", "is_ongoing",
+            "star_count", "is_starred",
+        ]
+        # started_at auto_now_add: diisi saat dibuat, klien tidak boleh menentukannya
+        read_only_fields = ["id", "started_at"]
+
+    # padanan clean_title / clean_description di ExperienceForm (Tugas 5)
+    def validate_title(self, value):
+        value = strip_tags(value).strip()
+        if not value:
+            raise serializers.ValidationError("Judul pengalaman tidak boleh kosong.")
+        return value
+
+    def validate_description(self, value):
+        value = strip_tags(value).strip()
+        if not value:
+            raise serializers.ValidationError("Deskripsi tidak boleh kosong.")
+        return value
 
     def get_star_count(self, obj):
         return len(obj.stars.all())

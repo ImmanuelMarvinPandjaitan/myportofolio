@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-6-$^d3wuz(!bur7y=5*hpqxjhotxk(bzh68fk1@!4#fd*$#&q@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "immanuel-marvin-myportofolio.pws.cs.ui.ac.id"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "10.0.2.2", "immanuel-marvin-myportofolio.pws.cs.ui.ac.id"]
 PRODUCTION = os.getenv('PRODUCTION', 'False').lower() == 'true'
 
 
@@ -38,6 +38,8 @@ PRODUCTION = os.getenv('PRODUCTION', 'False').lower() == 'true'
 # Application definition
 
 INSTALLED_APPS = [
+    "corsheaders",
+    "rest_framework.authtoken",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,6 +51,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -162,3 +165,20 @@ MAILERS = {
 CSRF_TRUSTED_ORIGINS = ["https://immanuel-marvin-myportofolio.pws.cs.ui.ac.id"]
 
 LOGIN_URL = "main:login"
+
+# --- Tutorial 10: autentikasi token dan CORS untuk klien mobile/web ---
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+}
+
+# Development: izinkan semua origin. Production: batasi lewat env.
+CORS_ALLOW_ALL_ORIGINS = not PRODUCTION
+if PRODUCTION:
+    CORS_ALLOWED_ORIGINS = [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
